@@ -47,6 +47,7 @@ UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
 MCP2515_HandleTypeDef mcp2515_1;
+MCP2515_MessageBuffer canMsg_buffer;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -153,6 +154,15 @@ int main(void)
 
   HAL_UART_Transmit(&huart1, (uint8_t*)resMcp2515_msg, strlen(resMcp2515_msg), HAL_MAX_DELAY);
 
+
+  uint8_t dataToSend[8] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
+  uint16_t msgId_1 = 0x100;
+
+  uint8_t msgId[2];
+  msgId[0] = (msgId_1 >> 8) & 0xFF;  // Estrai il byte alto (MSB)
+  msgId[1] = msgId_1 & 0xFF;         // Estrai il byte basso (LSB)
+
+  uint8_t readyToSendMsg = 1;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -174,6 +184,8 @@ int main(void)
 	  HAL_SPI_Transmit(&hspi1, &data, 1, HAL_MAX_DELAY);
 	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);  // CS alto
 	  HAL_Delay(2000);*/
+
+    MCP2515_SendMessage(&mcp2515_1, &canMsg_buffer, readyToSendMsg, dataToSend, msgId);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

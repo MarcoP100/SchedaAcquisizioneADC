@@ -238,4 +238,161 @@ uint8_t MCP2515_SetMode(MCP2515_HandleTypeDef* hdev, uint8_t mode) {
     return MCP2515_FAIL;
 }
 
+void MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* msgBuffer, uint8_t start) {
+    uint8_t writeMessage[5];
+    switch (msgBuffer->status){
 
+        case TRANSMISSION_IDLE:
+            if (start == 1){
+                msgBuffer->status = TRANSMISSION_SET_VALUE;
+                hdev->transmissionComplete = 0;
+            }
+            
+            break;
+
+        case TRANSMISSION_SET_VALUE:
+            switch (msgBuffer->buffer){
+                case MCP2515_TX_BUFFER_0:
+                    msgBuffer->loadIDCmd = MCP2515_LOAD_TX_ID_0;
+                    msgBuffer->loadDataCmd = MCP2515_LOAD_TX_DATA_0;
+                    msgBuffer->txDLCAddress = MCP2515_TXB0CTRL;
+                    msgBuffer->txTXREQAddress = MCP2515_TXB0CTRL;
+                    break;
+
+                case MCP2515_TX_BUFFER_1:
+                    msgBuffer->loadIDCmd = MCP2515_LOAD_TX_ID_1;
+                    msgBuffer->loadDataCmd = MCP2515_LOAD_TX_DATA_1;
+                    msgBuffer->txDLCAddress = MCP2515_TXB1CTRL;
+                    msgBuffer->txTXREQAddress = MCP2515_TXB1CTRL;
+                    break;
+
+                case MCP2515_TX_BUFFER_2:
+                    msgBuffer->loadIDCmd = MCP2515_LOAD_TX_ID_2;
+                    msgBuffer->loadDataCmd = MCP2515_LOAD_TX_DATA_2;
+                    msgBuffer->txDLCAddress = MCP2515_TXB2CTRL;
+                    msgBuffer->txTXREQAddress = MCP2515_TXB2CTRL;
+                    break;
+
+                default:
+                    break;
+            }
+
+            msgBuffer->status = TRANSMISSION_ID_CMD;
+            hdev->transmissionComplete = 0;
+            break;
+
+        case TRANSMISSION_ID_CMD:
+            HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
+            HAL_SPI_Transmit_IT(hdev->hspi, &msgBuffer->loadIDCmd, 1);
+            msgBuffer->status = TRANSMISSION_ID_VALUE;
+            hdev->transmissionComplete = 0;
+            break;
+
+        case TRANSMISSION_ID_VALUE:
+            
+             if (hdev->transmissionComplete == 1) {
+                hdev->transmissionComplete = 0;
+                HAL_SPI_Transmit_IT(hdev->hspi, msgBuffer->idData, 4);
+                msgBuffer->status = TRANSMISSION_DATA_CMD;
+            }
+            
+            break;
+
+        case TRANSMISSION_DATA_CMD:
+            
+             if (hdev->transmissionComplete == 1) {
+                hdev->transmissionComplete = 0;
+                HAL_SPI_Transmit_IT(hdev->hspi, &msgBuffer->loadDataCmd, 1);
+                msgBuffer->status = TRANSMISSION_DATA_VALUE;
+            }
+            
+            break;
+
+        case TRANSMISSION_DATA_VALUE:
+            
+             if (hdev->transmissionComplete == 1) {
+                hdev->transmissionComplete = 0;
+                HAL_SPI_Transmit_IT(hdev->hspi, msgBuffer->data, msgBuffer->length);
+                msgBuffer->status = TRANSMISSION_DLC;
+            }
+            
+            break;
+
+        case TRANSMISSION_DLC:
+            
+            
+             if (hdev->transmissionComplete == 1) {
+                hdev->transmissionComplete = 0;
+
+                writeMessage[0] = MCP2515_WRITE;
+                writeMessage[1] = msgBuffer->txDLCAddress;
+                if (msgBuffer->length <= 8)
+                    writeMessage[2] = msgBuffer->length;
+                else 
+                    writeMessage[2] = 8;
+
+                HAL_SPI_Transmit_IT(hdev->hspi, writeMessage, 3);
+                msgBuffer->status = TRANSMISSION_TXREQ;
+            }
+            
+            break;
+
+        case TRANSMISSION_TXREQ:
+            
+            
+            
+            if (hdev->transmissionComplete == 1) {
+                hdev->transmissionComplete = 0;
+
+                writeMessage[0] = MCP2515_BIT_MODIFY;
+                writeMessage[1] = msgBuffer->txTXREQAddress;
+                writeMessage[2] = MCP2515_TXREQ;
+                writeMessage[3] = 1;
+                HAL_SPI_Transmit_IT(hdev->hspi, writeMessage, 4);
+                msgBuffer->status = TRANSMISSION_END;
+                
+            }
+            
+            break;
+
+        case TRANSMISSION_END:
+            if (hdev->transmissionComplete == 1) {
+                hdev->transmissionComplete = 0;
+                HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS alto
+                msgBuffer->status = TRANSMISSION_IDLE;
+            }
+            break;
+
+        case TRANSMISSION_ERROR:
+            printf("Errore trasmissione");
+            msgBuffer->status = TRANSMISSION_IDLE;
+            
+            break;
+
+        default:
+            msgBuffer->status = TRANSMISSION_IDLE;  
+            break;
+        
+    }
+
+    return;
+
+}
+
+void MCP2515_SendMessage(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* msgBuffer, uint8_t readyToSend, uint8_t* data, uint8_t* msgID){
+    
+    if (readyToSend == 1) {
+        msgBuffer->buffer = MCP2515_TX_BUFFER_0;
+        msgBuffer->data = data;
+        msgBuffer->idData = msgID;
+        msgBuffer->length = 8;
+        MCP2515_LoadTXBuffer(hdev, msgBuffer, 1);
+
+    }
+    else
+       MCP2515_LoadTXBuffer(hdev, msgBuffer, 0);
+     
+
+    
+
+}
