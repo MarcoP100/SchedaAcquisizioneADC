@@ -1,0 +1,31 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Clean",
+            "type": "shell",
+            "command": "pio",
+            "args": ["run", "--target", "clean"],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build",
+            "type": "shell",
+            "command": "pio",
+            "args": ["run"],
+            "group": "build",
+            "problemMatcher": [],
+            "dependsOn": "Clean"
+        },
+        {
+            "label": "Upload",
+            "type": "shell",
+            "command": "pio",
+            "args": ["run", "--target", "upload"],
+            "group": "build",
+            "problemMatcher": [],
+            "dependsOn": "Build"
+        }
+    ]
+}

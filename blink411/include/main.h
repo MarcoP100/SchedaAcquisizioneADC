@@ -28,8 +28,6 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
-#include <string.h>
-#include "mcp2515.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -63,11 +61,15 @@ void Error_Handler(void);
 #define LedOnBoard_GPIO_Port GPIOC
 #define SPI1_CS_Pin GPIO_PIN_13
 #define SPI1_CS_GPIO_Port GPIOB
-#define MCP2515_int_Pin GPIO_PIN_6
-#define MCP2515_int_GPIO_Port GPIOB
+#define MCP2515_INT_Pin GPIO_PIN_6
+#define MCP2515_INT_GPIO_Port GPIOB
+#define MCP2515_INT_EXTI_IRQn EXTI9_5_IRQn
 
 /* USER CODE BEGIN Private defines */
 #define CAN0_BAUDRATE CAN_BAUDRATE_500kbps
+
+#define true  1
+#define false 0
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
