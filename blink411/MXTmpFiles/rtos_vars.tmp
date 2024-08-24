@@ -1,0 +1,26 @@
+/* Definitions for TaskADC */
+osThreadId_t TaskADCHandle;
+const osThreadAttr_t TaskADC_attributes = {
+#t.name = "TaskADC",
+#t.stack_size = 128 * 4,
+#t.priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for TaskCAN */
+osThreadId_t TaskCANHandle;
+const osThreadAttr_t TaskCAN_attributes = {
+#t.name = "TaskCAN",
+#t.stack_size = 128 * 4,
+#t.priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for TaskSPI */
+osThreadId_t TaskSPIHandle;
+const osThreadAttr_t TaskSPI_attributes = {
+#t.name = "TaskSPI",
+#t.stack_size = 128 * 4,
+#t.priority = (osPriority_t) osPriorityHigh,
+};
+/* Definitions for messageBuffer_10 */
+osMessageQueueId_t messageBuffer_10Handle;
+const osMessageQueueAttr_t messageBuffer_10_attributes = {
+#t.name = "messageBuffer_10"
+};

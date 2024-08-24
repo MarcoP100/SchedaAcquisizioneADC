@@ -1,0 +1,14 @@
+../Core/Src/mcp2515.c:8:9:MCP2515_Init	32	static
+../Core/Src/mcp2515.c:21:9:MCP2515_deviceInit	24	static
+../Core/Src/mcp2515.c:66:9:MCP2515_Reset	32	static
+../Core/Src/mcp2515.c:104:6:MCP2515_SetTransmissionComplete	16	static
+../Core/Src/mcp2515.c:109:9:MCP2515_SetBaudrate	32	static
+../Core/Src/mcp2515.c:181:9:MCP2515_WriteRegisterWithTimeout	32	static
+../Core/Src/mcp2515.c:211:9:MCP2515_ReadRegister	40	static
+../Core/Src/mcp2515.c:249:9:MCP2515_SetMode	24	static
+../Core/Src/mcp2515.c:280:9:MCP2515_ResetInt	24	static
+../Core/Src/mcp2515.c:291:9:MCP2515_SetIntTx	24	static
+../Core/Src/mcp2515.c:318:6:MCP2515_LoadTXBuffer	24	static
+../Core/Src/mcp2515.c:513:9:MCP2515_SendMessage	32	static
+../Core/Src/mcp2515.c:581:9:MCP2515_InterruptHandler	56	static
+../Core/Src/mcp2515.c:686:6:initBuffer	16	static

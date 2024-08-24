@@ -31,11 +31,11 @@ static void MX_GPIO_Init(void)
 #tHAL_GPIO_Init(SPI1_CS_GPIO_Port, &GPIO_InitStruct);
 #n#t/*Configure GPIO pin : MCP2515_INT_Pin */
 #tGPIO_InitStruct.Pin = MCP2515_INT_Pin;
-#tGPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-#tGPIO_InitStruct.Pull = GPIO_NOPULL;
+#tGPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+#tGPIO_InitStruct.Pull = GPIO_PULLUP;
 #tHAL_GPIO_Init(MCP2515_INT_GPIO_Port, &GPIO_InitStruct);
 #n#t/* EXTI interrupt init*/
-#tHAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+#tHAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
 #tHAL_NVIC_EnableIRQ(EXTI9_5_IRQn);#n#n
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
