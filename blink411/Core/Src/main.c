@@ -43,10 +43,10 @@
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
+DMA_HandleTypeDef hdma_spi1_tx;
+DMA_HandleTypeDef hdma_spi1_rx;
 
 UART_HandleTypeDef huart1;
-
-
 
 /* Definitions for TaskADC */
 osThreadId_t TaskADCHandle;
@@ -66,7 +66,7 @@ const osThreadAttr_t TaskCAN_attributes = {
 osThreadId_t TaskSPIHandle;
 const osThreadAttr_t TaskSPI_attributes = {
   .name = "TaskSPI",
-  .stack_size = 256 * 4,
+  .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for messageBuffer_10 */
@@ -76,9 +76,9 @@ const osMessageQueueAttr_t messageBuffer_10_attributes = {
 };*/
 /* USER CODE BEGIN PV */
 MCP2515_HandleTypeDef mcp2515_1;
-canMessage canMessagesBuffer[BUFFER_TX_LENGHT];
-volatile uint8_t mcp2515Int;
-uint8_t canMsgToSend = 0;
+//canMessage canMessagesBuffer[BUFFER_TX_LENGHT];
+//volatile uint8_t mcp2515Int;
+//uint8_t canMsgToSend = 0;
 MCP2515_canMessage canMessageTx[BUFFER_TX_SPI];
 static uint8_t result_mcp2515Init = 1;
 
@@ -87,6 +87,7 @@ static uint8_t result_mcp2515Init = 1;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART1_UART_Init(void);
 void StartTaskADC(void *argument);
@@ -110,7 +111,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	mcp2515Int = false;
+	//mcp2515Int = false;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -131,6 +132,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_SPI1_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
@@ -156,9 +158,8 @@ int main(void)
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the queue(s) */
-  /* creation of
- */
-  //messageBuffer_10Handle = osMessageQueueNew (10, sizeof(MCP2515_canMessage), &messageBuffer_10_attributes);
+  /* creation of messageBuffer_10 */
+  //messageBuffer_10Handle = osMessageQueueNew (10, sizeof(uint16_t), &messageBuffer_10_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -332,6 +333,25 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 1, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+  /* DMA2_Stream2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 1, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -374,8 +394,8 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(MCP2515_INT_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
-  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+  //HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
+  //HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -385,8 +405,8 @@ static void MX_GPIO_Init(void)
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) {
     // Verifica che questo callback sia per il tuo hspi
     if (hspi == &hspi1) {
-        MCP2515_SetTransmissionComplete(&mcp2515_1, 1);
-
+        //MCP2515_SetTransmissionComplete(&mcp2515_1, 1);
+    	mcp2515_1.transmissionComplete = true;
         //BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         //vTaskNotifyGiveFromISR(xTaskHandleSPI, &xHigherPriorityTaskWoken);
         //portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
@@ -395,25 +415,30 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) {
 
 void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) {
     if (hspi == &hspi1) {
-      MCP2515_SetTransmissionComplete(&mcp2515_1, 1);
+    	//MCP2515_SetTransmissionComplete(&mcp2515_1, 1);
+    	mcp2515_1.transmissionComplete = true;
     }
 }
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
     if (hspi == &hspi1) {
-      MCP2515_SetTransmissionComplete(&mcp2515_1, 1);
+    	//MCP2515_SetTransmissionComplete(&mcp2515_1, 1);
+    	mcp2515_1.transmissionComplete = true;
     }
 }
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+/*void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     if (GPIO_Pin == GPIO_PIN_6)
     {
         // Codice per gestire l'interrupt del MCP2515
-        mcp2515Int = true;
+        mcp2515Int++;
         //printf("Interrupt\n");
-    }
-}
+       /* char message [20];
+       sprintf(message, "Interrupt\r\n");
+        HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);*/
+    //}
+//}
 
 
 int __io_putchar(int ch) {
@@ -483,10 +508,9 @@ void canMsgTx(uint8_t* dataToSend, uint32_t* msgID, uint8_t extendedFormat, uint
 /* USER CODE END Header_StartTaskADC */
 void StartTaskADC(void *argument)
 {
-
   /* USER CODE BEGIN 5 */
 	TickType_t xLastWakeTime = xTaskGetTickCount();
-	const TickType_t xFrequency = 8;
+	const TickType_t xFrequency = 5;
 
 
 	static uint8_t dataToSend1[8] = {0x56, 0x26, 0x88, 0x12, 0x67, 0x99, 0xAA, 0x88};
@@ -498,6 +522,11 @@ void StartTaskADC(void *argument)
 	static uint8_t dataToSend7[8] = {0x99, 0x28, 0x73, 0xC4, 0xF6, 0x13, 0xB1, 0x2E};
 	static uint8_t dataToSend8[8] = {0xEF, 0x5A, 0x64, 0x92, 0x3B, 0x87, 0xD3, 0x41};
 	static uint8_t dataToSend9[8] = {0xAA, 0x38, 0x5C, 0x72, 0x49, 0xF1, 0xBE, 0x6D};
+	static uint8_t dataToSend10[8] = {0x7E, 0xD4, 0x11, 0x89, 0xB5, 0x23, 0x6A, 0xFC};
+	static uint8_t dataToSend11[8] = {0x4B, 0xC3, 0x9F, 0x02, 0x71, 0xD8, 0xA6, 0x5D};
+	static uint8_t dataToSend12[8] = {0x99, 0x28, 0x73, 0xC4, 0xF6, 0x13, 0xB1, 0x2E};
+	static uint8_t dataToSend13[8] = {0xEF, 0x5A, 0x64, 0x92, 0x3B, 0x87, 0xD3, 0x41};
+	static uint8_t dataToSend14[8] = {0xAA, 0x38, 0x5C, 0x72, 0x49, 0xF1, 0xBE, 0x6D};
 	uint32_t msgId1 = 0x200;
 	uint32_t msgId2 = 0x210;
 	uint32_t msgId3 = 0x220;
@@ -507,6 +536,13 @@ void StartTaskADC(void *argument)
 	uint32_t msgId7 = 0x260;
 	uint32_t msgId8 = 0x270;
 	uint32_t msgId9 = 0x280;
+	uint32_t msgId10 = 0x281;
+	uint32_t msgId11 = 0x282;
+	uint32_t msgId12 = 0x283;
+	uint32_t msgId13 = 0x284;
+	uint32_t msgId14 = 0x285;
+
+
 
 	//uint32_t start_time, timeADC;
 	// Inizializza start_time
@@ -536,6 +572,11 @@ void StartTaskADC(void *argument)
 		  canMsgTx(dataToSend7, &msgId7, false, 8);
 		  canMsgTx(dataToSend8, &msgId8, false, 8);
 		  canMsgTx(dataToSend9, &msgId9, false, 8);
+		  /*canMsgTx(dataToSend10, &msgId10, false, 8);
+		  canMsgTx(dataToSend11, &msgId11, false, 8);
+		  canMsgTx(dataToSend12, &msgId12, false, 8);
+		  canMsgTx(dataToSend13, &msgId13, false, 8);
+		  canMsgTx(dataToSend14, &msgId14, false, 8);*/
 		 /* char message [10];
 			  // Converte l'intero in una stringa
 			  sprintf(message, "ADC: %d\r\n", canMessagesBuffer[index].msgData[0]);
@@ -561,17 +602,17 @@ void StartTaskADC(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartTaskCAN */
-void StartTaskCAN(void *argument)
+/*void StartTaskCAN(void *argument)
 {
   /* USER CODE BEGIN StartTaskCAN */
-	uint8_t msgId_bf[4];
+	/*uint8_t msgId_bf[4];
 	static uint8_t indexBfIn = 0;
 	static uint8_t indexTxMsg = 0;
 	//uint32_t start_time, timeADC;
 		// Inizializza start_time
 		// start_time = HAL_GetTick();
   /* Infinite loop */
-  for(;;)
+  /*for(;;)
   {
 	  if (canMessagesBuffer[indexBfIn].newMsg
 			  &&  !canMessageTx[indexTxMsg].sending
@@ -603,7 +644,7 @@ void StartTaskCAN(void *argument)
 		  sprintf(message, "index: %d\r\n", indexTxMsg);
 		  HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
 */
-		  indexBfIn++;
+	/*	  indexBfIn++;
 		  if (indexBfIn >= BUFFER_TX_LENGHT) {
 			  indexBfIn = 0;
 		  }
@@ -619,15 +660,15 @@ void StartTaskCAN(void *argument)
 		  	  	  	  sprintf(message, "time CAN: %lu ms\r\n", timeADC);
 		  	  	  	  HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);*/
 
-	  }
+	  //}
 
 
 
 
 
-  }
+  //}
   /* USER CODE END StartTaskCAN */
-}
+//}
 
 /* USER CODE BEGIN Header_StartTaskSPI */
 /**
@@ -707,8 +748,8 @@ void StartTaskSPI(void *argument)
 	  uint8_t resultHandler = 0;
 	  uint8_t resultSend = 0;
 
-	  /*uint8_t result = 10;
-	  static uint8_t index = 0;
+	  uint8_t result = 10;
+	 /* static uint8_t index = 0;
 	  static uint8_t dataToSend1[8] = {0x56, 0x26, 0x88, 0x12, 0x67, 0x99, 0xAA, 0x88};
 	static uint8_t dataToSend2[8] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
 	static uint8_t dataToSend3[8] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17};
@@ -718,6 +759,11 @@ void StartTaskSPI(void *argument)
 	static uint8_t dataToSend7[8] = {0x99, 0x28, 0x73, 0xC4, 0xF6, 0x13, 0xB1, 0x2E};
 	static uint8_t dataToSend8[8] = {0xEF, 0x5A, 0x64, 0x92, 0x3B, 0x87, 0xD3, 0x41};
 	static uint8_t dataToSend9[8] = {0xAA, 0x38, 0x5C, 0x72, 0x49, 0xF1, 0xBE, 0x6D};
+	static uint8_t dataToSend10[8] = {0x7E, 0xD4, 0x11, 0x89, 0xB5, 0x23, 0x6A, 0xFC};
+		static uint8_t dataToSend11[8] = {0x4B, 0xC3, 0x9F, 0x02, 0x71, 0xD8, 0xA6, 0x5D};
+		static uint8_t dataToSend12[8] = {0x99, 0x28, 0x73, 0xC4, 0xF6, 0x13, 0xB1, 0x2E};
+		static uint8_t dataToSend13[8] = {0xEF, 0x5A, 0x64, 0x92, 0x3B, 0x87, 0xD3, 0x41};
+		static uint8_t dataToSend14[8] = {0xAA, 0x38, 0x5C, 0x72, 0x49, 0xF1, 0xBE, 0x6D};
 	uint32_t msgId1 = 0x200;
 	uint32_t msgId2 = 0x210;
 	uint32_t msgId3 = 0x220;
@@ -727,24 +773,62 @@ void StartTaskSPI(void *argument)
 	uint32_t msgId7 = 0x260;
 	uint32_t msgId8 = 0x270;
 	uint32_t msgId9 = 0x280;
-	  	const uint16_t msgId = 0x200;
-	  	uint8_t msgId_bf[4];
-	  	static uint8_t indexBfIn = 0;
-	  	static uint8_t indexTxMsg = 0;
+	uint32_t msgId10 = 0x281;
+		uint32_t msgId11 = 0x282;
+		uint32_t msgId12 = 0x283;
+		uint32_t msgId13 = 0x284;
+		uint32_t msgId14 = 0x285;
+
 	  	uint32_t start_time, timeADC;
+	  	uint32_t start_time2, time2;
 	  			// Inizializza start_time
-	  			 start_time = HAL_GetTick();*/
+	  			 start_time = HAL_GetTick();
+	  			start_time2 = HAL_GetTick();*/
+	  			char message [50];
+
+	GPIO_PinState  mcp2515IntState;
   /* Infinite loop */
   for(;;)
   {
 
 	  //ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 	  if (result_mcp2515Init == MCP2515_OK){
-		 //timeADC = HAL_GetTick() - start_time;
+		/* timeADC = HAL_GetTick() - start_time;
+		 time2 = HAL_GetTick() - start_time2;
 
-		 /* if (timeADC >=1){
+
+
+		 if (time2>=30000){
+			 start_time2  = HAL_GetTick();
+
+			 uint8_t readCTRL;
+
+			 sprintf(message, "Reg: %d-%d-%d\r\n", mcp2515_1.emptyTXBuffer[0], mcp2515_1.emptyTXBuffer[1], mcp2515_1.emptyTXBuffer[2]);
+			 HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
+			 sprintf(message, "buffer sts: %d\r\n", canMsg_buffer.status );
+			 HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
+			 /*MCP2515_ReadRegister(&mcp2515_1,0x30, &readCTRL);
+			 sprintf(message, "ctrl1: 0x%02X\r\n", readCTRL );
+			 			 HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
+			 MCP2515_ReadRegister(&mcp2515_1,0x40, &readCTRL);
+			 sprintf(message, "ctrl2: 0x%02X\r\n", readCTRL);
+			 			 HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
+			 MCP2515_ReadRegister(&mcp2515_1,0x50, &readCTRL);
+			 sprintf(message, "crtl3: 0x%02X\r\n", readCTRL);
+			 			 HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
+
+		 }
+
+		  if (timeADC >=5){
 
 			  start_time = HAL_GetTick();
+			  /*sprintf(message, "Flag: %d\r\n", mcp2515Int);
+			  HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
+
+			  //sprintf(message, "Reg: %d-%d-%d,   buffer sts: %d\r\n", mcp2515_1.emptyTXBuffer[0], mcp2515_1.emptyTXBuffer[1], mcp2515_1.emptyTXBuffer[2],canMsg_buffer.status );
+			  //HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
+
+			  dataToSend1[0] ++;
 			  canMsgTx(dataToSend1, &msgId1, false, 8);
 			  canMsgTx(dataToSend2, &msgId2, false, 8);
 			  canMsgTx(dataToSend3, &msgId3, false, 8);
@@ -754,88 +838,60 @@ void StartTaskSPI(void *argument)
 			  canMsgTx(dataToSend7, &msgId7, false, 8);
 			  canMsgTx(dataToSend8, &msgId8, false, 8);
 			  canMsgTx(dataToSend9, &msgId9, false, 8);
+			 /* canMsgTx(dataToSend10, &msgId10, false, 8);
+			  			  canMsgTx(dataToSend11, &msgId11, false, 8);
+			  			  canMsgTx(dataToSend12, &msgId12, false, 8);
+			  			  canMsgTx(dataToSend13, &msgId13, false, 8);
+			  			  canMsgTx(dataToSend14, &msgId14, false, 8);
 
-
-			  if (canMessagesBuffer[indexBfIn].extended){
-				  msgId_bf[0] = (canMessagesBuffer[indexBfIn].msgID >> 3) & 0xFF;  // Estrai il byte alto (MSB)
-				  msgId_bf[1] = (canMessagesBuffer[indexBfIn].msgID << 5) & 0xE0;         // Estrai il byte basso (LSB)
-				  msgId_bf[1] = msgId_bf[1] | 8;
-				  msgId_bf[1] = msgId_bf[1] | ((canMessagesBuffer[indexBfIn].msgID >> 28) & 0x02);
-				  msgId_bf[2] = (canMessagesBuffer[indexBfIn].msgID >> 19) & 0xFF;
-				  msgId_bf[3] = (canMessagesBuffer[indexBfIn].msgID >> 11) & 0xFF;
-
-			  } else{
-
-				msgId_bf[0] = (canMessagesBuffer[indexBfIn].msgID >> 3) & 0xFF;  // Estrai il byte alto (MSB)
-				msgId_bf[1] = (canMessagesBuffer[indexBfIn].msgID << 5) & 0xE0;         // Estrai il byte basso (LSB)
-				msgId_bf[2] = 0x0;
-				msgId_bf[3] = 0x0;
-			  }
-
-
-			  memcpy(canMessageTx[indexTxMsg].msgID, msgId_bf, sizeof(msgId_bf));
-			  memcpy(canMessageTx[indexTxMsg].msgData, canMessagesBuffer[indexBfIn].msgData, sizeof(canMessagesBuffer[indexBfIn].msgData));
-			  canMessageTx[indexTxMsg].dlc = canMessagesBuffer[indexBfIn].dlc;
-			  canMessageTx[indexTxMsg].newMsg = true;
-
-			 char message [40];
-			  // Converte l'intero in una stringa
-			  sprintf(message, "Msg: %d,0x%02X,0x%02X\r\n", indexTxMsg,canMessageTx[indexTxMsg].msgID[0], canMessageTx[indexTxMsg].msgID[1] );
-			  HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
-
-
-			  indexBfIn++;
-			  if (indexBfIn >= BUFFER_TX_LENGHT) {
-				  indexBfIn = 0;
-			  }
-			  indexTxMsg++;
-			  if (indexTxMsg >= BUFFER_TX_SPI) {
-				indexTxMsg = 0;
-			  }
-		}
-			 /*char message [20];
-				// Converte l'intero in una stringa
-			  sprintf(message, "Index: %d\r\n", indexTxMsg);
-			  HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);*/
+		}*/
 
 
 
 
+		  mcp2515IntState = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6);
 
-		  resultHandler = MCP2515_InterruptHandler(&mcp2515_1, &mcp2515Int, &canMsg_buffer);
+		  resultHandler = MCP2515_InterruptHandler(&mcp2515_1, mcp2515IntState, &canMsg_buffer);
 
-		  	  /*if (resultHandler != MCP2515_OK){
-		  	  char message [20];
+		  	 /* if (resultHandler != 0){
+
 			  	// Converte l'intero in una stringa
 			  sprintf(message, "Result: %d\r\n", resultHandler);
 			  HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
+			  // Converte l'intero in una stringa
+			  	//	  	sprintf(message, "Flag: %d\r\n", mcp2515Int);
+			  	//	  	HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
+		  	  }*/
+		  	 /* if (mcp2515Int==true){
+		  		sprintf(message, "Flag ON\r\n");
+		  		HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
 		  	  }*/
 
 
 
 		  	resultSend = MCP2515_SendMessage(&mcp2515_1, &canMsg_buffer, canMessageTx);
-		  	/*if (resultSend != 1 && resultSend !=2){
-		  	char message [20];
+		  	if (resultSend != 0){
+
 			 // Converte l'intero in una stringa
 			  sprintf(message, "ResultSend: %d\r\n", resultSend);
 			  HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
-		  	}*/
+		  	}
 
 
-	     	/* char message [20];
+	     	/*
 			 // Converte l'intero in una stringa
 			  sprintf(message, "Status: %d\r\n", canMsg_buffer.status);
 			  HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
 
-			  char message2 [20];
+
 			  				// Converte l'intero in una stringa
 			  			  sprintf(message2, "Complete: %d\r\n", mcp2515_1.transmissionComplete);
 			  			  HAL_UART_Transmit(&huart1, (uint8_t*)message2, strlen(message2), HAL_MAX_DELAY);*/
 
 
 
-	    /* if (canMsg_buffer.status == TRANSMISSION_END){
-	    	char message [10];
+	     /*if (canMsg_buffer.status == TRANSMISSION_END){
+	    	char message [20];
 	    	// Converte l'intero in una stringa
 	    	sprintf(message, "Msg: %d\r\n", canMsg_buffer.buffer);
 	    	HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);

@@ -3,6 +3,8 @@
 
 #include "stm32f4xx_hal.h"
 #include <stdio.h>
+#include <stdbool.h>
+
 
 
 #define MCP2515_CNF1_MSG        0x2A
@@ -109,8 +111,6 @@
 #define MCP2515_TXREQ_MASK          8
 #define MCP2515_TXREQ_SET           8
 
-#define true  1
-#define false 0
 
 #define MAX_RETRY 20  // Numero massimo di tentativi
 
@@ -123,7 +123,7 @@ enum TransmissionState {
     TRANSMISSION_DATA_VALUE,    // Valore 5
     TRANSMISSION_DLC,           // Valore 6
     TRANSMISSION_TXREQ,         // Valore 7
-    TRANSMISSION_END,           // Valore 9
+    TRANSMISSION_END,           // Valore 8
 	TRANSMISSION_RESET,
     TRANSMISSION_ERROR          // Valore 9
 };
@@ -137,7 +137,8 @@ typedef struct {
     GPIO_TypeDef* csPort;
     uint16_t csPin;
     SPI_HandleTypeDef* hspi;
-    uint8_t transmissionComplete;
+    volatile uint8_t transmissionComplete;
+    uint8_t emptyTXBuffer[3];
 } MCP2515_HandleTypeDef;
 
 typedef struct {
@@ -168,11 +169,12 @@ uint8_t MCP2515_deviceInit(MCP2515_HandleTypeDef* hdev, uint8_t baudrate, uint8_
 uint8_t MCP2515_SetMode(MCP2515_HandleTypeDef* hdev, uint8_t mode);
 uint8_t MCP2515_SetBaudrate(MCP2515_HandleTypeDef* hdev, uint8_t baudrate);
 uint8_t MCP2515_WriteRegisterWithTimeout(MCP2515_HandleTypeDef* hdev, uint8_t address, uint8_t value, uint32_t timeout);
+uint8_t MCP2515_WriteBitWithTimeout(MCP2515_HandleTypeDef* hdev, uint8_t address, uint8_t mask, uint8_t value, uint32_t timeout);
 uint8_t MCP2515_ReadRegister(MCP2515_HandleTypeDef* hdev, uint8_t address, uint8_t* data);
 void MCP2515_SetTransmissionComplete(MCP2515_HandleTypeDef* hdev, uint8_t transmissionComplete);
-void MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* msgBuffer, uint8_t start);
+uint8_t MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* msgBuffer, uint8_t start);
 uint8_t MCP2515_SendMessage(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* msgBuffer, MCP2515_canMessage* canMessageTx);
-uint8_t MCP2515_InterruptHandler(MCP2515_HandleTypeDef* hdev, volatile uint8_t* intFlag, MCP2515_MessageBuffer* msgBuffer);
+uint8_t MCP2515_InterruptHandler(MCP2515_HandleTypeDef* hdev, GPIO_PinState intFlag, MCP2515_MessageBuffer* msgBuffer);
 uint8_t MCP2515_SetIntTx(MCP2515_HandleTypeDef* hdev);
 uint8_t MCP2515_ResetInt(MCP2515_HandleTypeDef* hdev);
 

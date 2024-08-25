@@ -63,7 +63,7 @@ void Error_Handler(void);
 #define SPI1_CS_GPIO_Port GPIOB
 #define MCP2515_INT_Pin GPIO_PIN_6
 #define MCP2515_INT_GPIO_Port GPIOB
-#define MCP2515_INT_EXTI_IRQn EXTI9_5_IRQn
+//#define MCP2515_INT_EXTI_IRQn EXTI9_5_IRQn
 
 /* USER CODE BEGIN Private defines */
 #define CAN0_BAUDRATE CAN_BAUDRATE_500kbps

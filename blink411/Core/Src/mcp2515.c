@@ -1,14 +1,18 @@
 #include "mcp2515.h"
 
-static uint8_t emptyTXBuffer[3] = {true, true,true};
+//static uint8_t emptyTXBuffer[3] = {true, true,true};
 uint8_t idDataEmpty[4] = {0x0, 0x0, 0x0, 0x0};
 uint8_t dataEmpty[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,0x0};
+static uint8_t writeMessage[4];
 
 // Costruttore
 uint8_t MCP2515_Init(MCP2515_HandleTypeDef* hdev, GPIO_TypeDef* csPort,  uint16_t csPin, SPI_HandleTypeDef* hspi, uint8_t baudrate,uint8_t intTxEnable ) {
     hdev->csPin = csPin;
     hdev->csPort = csPort;
     hdev->hspi = hspi;
+    hdev->emptyTXBuffer[0] = true;
+    hdev->emptyTXBuffer[1] = true;
+    hdev->emptyTXBuffer[2] = true;
     
     uint8_t result = MCP2515_OK;
     result = MCP2515_deviceInit(hdev, baudrate, intTxEnable);
@@ -72,7 +76,7 @@ uint8_t MCP2515_Reset(MCP2515_HandleTypeDef* hdev) {
     
     HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
     //HAL_Delay(2);
-    HAL_SPI_Transmit_IT(hdev->hspi, &resetCommand, 1); // Invia il comando di reset
+    HAL_SPI_Transmit_DMA(hdev->hspi, &resetCommand, 1); // Invia il comando di reset
     uint32_t startTime = HAL_GetTick();
     // Attendi il completamento della trasmissione
     while (!hdev->transmissionComplete) {
@@ -192,7 +196,7 @@ uint8_t MCP2515_WriteRegisterWithTimeout(MCP2515_HandleTypeDef* hdev, uint8_t ad
     
     HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
     hdev->transmissionComplete = 0;
-    HAL_SPI_Transmit_IT(hdev->hspi, writeMessage, 3);
+    HAL_SPI_Transmit_DMA(hdev->hspi, writeMessage, 3);
 
     startTime = HAL_GetTick();
     while (!hdev->transmissionComplete) {
@@ -204,6 +208,37 @@ uint8_t MCP2515_WriteRegisterWithTimeout(MCP2515_HandleTypeDef* hdev, uint8_t ad
     hdev->transmissionComplete = 0;
     HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS alto
     
+    return MCP2515_OK;
+}
+
+uint8_t MCP2515_WriteBitWithTimeout(MCP2515_HandleTypeDef* hdev, uint8_t address, uint8_t mask, uint8_t value, uint32_t timeout){
+    uint32_t startTime;
+
+    uint8_t writeMessage[3];
+    writeMessage[0] = MCP2515_BIT_MODIFY;
+    writeMessage[1] = address;
+    writeMessage[2] = mask;
+    writeMessage[3] = value;
+
+    /*printf("value: 0x%02X\n", value);
+    int arraySize = sizeof(writeMessage) / sizeof(writeMessage[0]);
+    printByteArray(writeMessage, arraySize);*/
+
+
+    HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
+    hdev->transmissionComplete = 0;
+    HAL_SPI_Transmit_DMA(hdev->hspi, writeMessage, 4);
+
+    startTime = HAL_GetTick();
+    while (!hdev->transmissionComplete) {
+        if ((HAL_GetTick() - startTime) > timeout) {
+            HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS alto
+            return MCP2515_FAIL; // Timeout raggiunto
+        }
+    }
+    hdev->transmissionComplete = 0;
+    HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS alto
+
     return MCP2515_OK;
 }
 
@@ -219,7 +254,7 @@ uint8_t MCP2515_ReadRegister(MCP2515_HandleTypeDef* hdev, uint8_t address, uint8
     HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
     hdev->transmissionComplete = 0;  // Resetta lo stato
     // Trasmetti il comando di lettura e l'indirizzo
-    HAL_SPI_Transmit_IT(hdev->hspi, readMessage, 2);
+    HAL_SPI_Transmit_DMA(hdev->hspi, readMessage, 2);
     startTime = HAL_GetTick();
     // Attendi che la trasmissione sia completata
     while (!hdev->transmissionComplete) {
@@ -231,7 +266,7 @@ uint8_t MCP2515_ReadRegister(MCP2515_HandleTypeDef* hdev, uint8_t address, uint8
     }
     hdev->transmissionComplete = 0;  // Resetta lo stato
     // Ricevi il dato dal registro
-    HAL_SPI_TransmitReceive_IT(hdev->hspi, &dummyData, data, 1);
+    HAL_SPI_TransmitReceive_DMA(hdev->hspi, &dummyData, data, 1);
     startTime = HAL_GetTick();
     // Attendi che la ricezione sia completata
     while (!hdev->transmissionComplete) {
@@ -315,15 +350,19 @@ uint8_t MCP2515_SetIntTx(MCP2515_HandleTypeDef* hdev) {
     return MCP2515_FAIL;
 }
 
-void MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* msgBuffer, uint8_t start) {
-    static uint8_t writeMessage[4];
+uint8_t MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* msgBuffer, uint8_t start) {
 
-    switch (msgBuffer->status){
+	static uint32_t start_time, timeWait;
+	static uint8_t status_old;
+
+	timeWait = HAL_GetTick() - start_time;
+	switch (msgBuffer->status){
 
         case TRANSMISSION_IDLE:
             if (start == 1){
                 msgBuffer->status = TRANSMISSION_SET_VALUE;
                 hdev->transmissionComplete = 0;
+                hdev->emptyTXBuffer[msgBuffer->buffer] = false;
             }
             
             break;
@@ -366,37 +405,51 @@ void MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* ms
             HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
             hdev->transmissionComplete = 0;
             //printf("ID_ADDR: 0x%02X"\n, msgBuffer->loadIDCmd);
-            HAL_SPI_Transmit_IT(hdev->hspi, &msgBuffer->loadIDCmd, 1);
+            HAL_SPI_Transmit_DMA(hdev->hspi, &msgBuffer->loadIDCmd, 1);
             msgBuffer->status = TRANSMISSION_ID_VALUE;
             
             break;
 
         case TRANSMISSION_ID_VALUE:
+
+        	if (timeWait>=1){
+        		msgBuffer->status = TRANSMISSION_ERROR;
+        		return 100;
+        	}
             
              if (hdev->transmissionComplete == 1) {
             	 // HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS basso
                 hdev->transmissionComplete = 0;
                 //HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
-                HAL_SPI_Transmit_IT(hdev->hspi, msgBuffer->idData, 4);
+                HAL_SPI_Transmit_DMA(hdev->hspi, msgBuffer->idData, 4);
                 msgBuffer->status = TRANSMISSION_DATA_CMD;
             }
             
+
             break;
 
         case TRANSMISSION_DATA_CMD:
+        	if (timeWait>=1){
+        	        		msgBuffer->status = TRANSMISSION_ERROR;
+        	        		return 101;
+        	        	}
             
              if (hdev->transmissionComplete == 1) {
             	// HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS basso
                 hdev->transmissionComplete = 0;
                 //HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
-                HAL_SPI_Transmit_IT(hdev->hspi, &msgBuffer->loadDataCmd, 1);
+                HAL_SPI_Transmit_DMA(hdev->hspi, &msgBuffer->loadDataCmd, 1);
                 msgBuffer->status = TRANSMISSION_DATA_VALUE;
             }
             
             break;
 
         case TRANSMISSION_DATA_VALUE:
-            
+        	if (timeWait>=1){
+        	        		msgBuffer->status = TRANSMISSION_ERROR;
+        	        		return 102;
+        	        	}
+
              if (hdev->transmissionComplete == 1) {
             	// HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS basso
                 hdev->transmissionComplete = 0;
@@ -407,14 +460,17 @@ void MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* ms
 
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
 
-                HAL_SPI_Transmit_IT(hdev->hspi, msgBuffer->data, msgBuffer->length);
+                HAL_SPI_Transmit_DMA(hdev->hspi, msgBuffer->data, msgBuffer->length);
                 msgBuffer->status = TRANSMISSION_DLC;
             }
             
             break;
 
         case TRANSMISSION_DLC:
-            
+        	if (timeWait>=1){
+        	        		msgBuffer->status = TRANSMISSION_ERROR;
+        	        		return 103;
+        	        	}
             
              if (hdev->transmissionComplete == 1) {
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS basso
@@ -427,7 +483,7 @@ void MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* ms
                 //printf("0: 0x%02X, 1: 0x%02X, 2: 0x%02X\n", writeMessage[0], writeMessage[1], writeMessage[2]);
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
                 hdev->transmissionComplete = 0;
-                HAL_SPI_Transmit_IT(hdev->hspi, writeMessage, 3);
+                HAL_SPI_Transmit_DMA(hdev->hspi, writeMessage, 3);
                 msgBuffer->status = TRANSMISSION_TXREQ;
             }
             
@@ -435,7 +491,10 @@ void MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* ms
 
         case TRANSMISSION_TXREQ:
             
-            
+        	if (timeWait>=1){
+        	        		msgBuffer->status = TRANSMISSION_ERROR;
+        	        		return 104;
+        	        	}
             
             if (hdev->transmissionComplete == 1) {
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS basso
@@ -446,8 +505,8 @@ void MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* ms
 
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
                 hdev->transmissionComplete = 0;
-                HAL_SPI_Transmit_IT(hdev->hspi, writeMessage, 4);
-                emptyTXBuffer[msgBuffer->buffer] = false;
+                HAL_SPI_Transmit_DMA(hdev->hspi, writeMessage, 4);
+
                 msgBuffer->status = TRANSMISSION_END;
                 
             }
@@ -455,6 +514,10 @@ void MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* ms
             break;
 
         case TRANSMISSION_END:
+        	if (timeWait>=1){
+        	        		msgBuffer->status = TRANSMISSION_ERROR;
+        	        		return 105;
+        	        	}
             if (hdev->transmissionComplete == 1) {
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS alto
                 hdev->transmissionComplete = 0;
@@ -495,7 +558,10 @@ void MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* ms
         	break;
 
         case TRANSMISSION_ERROR:
-            printf("Errore trasmissione");
+            //printf("Errore trasmissione");
+        	HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS alto
+        	hdev->transmissionComplete = 0;
+        	hdev->emptyTXBuffer[msgBuffer->buffer] = true;
             msgBuffer->status = TRANSMISSION_IDLE;
             
             break;
@@ -506,7 +572,11 @@ void MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* ms
         
     }
 
-    return;
+	if (msgBuffer->status != status_old){
+			status_old = msgBuffer->status;
+			start_time = HAL_GetTick();
+		}
+    return 0;
 
 }
 
@@ -515,15 +585,16 @@ uint8_t MCP2515_SendMessage(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* 
 	uint8_t readyToSend = false;
 	uint8_t result = 0;
 
-    if (emptyTXBuffer[MCP2515_TX_BUFFER_0] ||
-    		emptyTXBuffer[MCP2515_TX_BUFFER_1] ||
-			emptyTXBuffer[MCP2515_TX_BUFFER_2]){
+    if (hdev->emptyTXBuffer[MCP2515_TX_BUFFER_0] ||
+    		hdev->emptyTXBuffer[MCP2515_TX_BUFFER_1] ||
+			hdev->emptyTXBuffer[MCP2515_TX_BUFFER_2]){
         readyToSend = true;
     }
 
 
 
-    if (msgBuffer->status ==  TRANSMISSION_RESET){
+    if (msgBuffer->status ==  TRANSMISSION_RESET ||
+    		msgBuffer->status ==  TRANSMISSION_ERROR	){
     	canMessageTx[indexMsg].sending = false;
     	canMessageTx[indexMsg].newMsg = false;
     	indexMsg ++;
@@ -536,13 +607,13 @@ uint8_t MCP2515_SendMessage(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* 
 		msgBuffer->status ==  TRANSMISSION_IDLE &&
 		canMessageTx[indexMsg].newMsg) {
 
-    	if (emptyTXBuffer[MCP2515_TX_BUFFER_0]){
+    	if (hdev->emptyTXBuffer[MCP2515_TX_BUFFER_0]){
     		msgBuffer->buffer = MCP2515_TX_BUFFER_0;
 		}
-    	else if (emptyTXBuffer[MCP2515_TX_BUFFER_1]){
+    	else if (hdev->emptyTXBuffer[MCP2515_TX_BUFFER_1]){
     		msgBuffer->buffer = MCP2515_TX_BUFFER_1;
 		}
-    	else if (emptyTXBuffer[MCP2515_TX_BUFFER_2]){
+    	else if (hdev->emptyTXBuffer[MCP2515_TX_BUFFER_2]){
     		msgBuffer->buffer = MCP2515_TX_BUFFER_2;
 		}
     	else{
@@ -552,43 +623,53 @@ uint8_t MCP2515_SendMessage(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer* 
     	msgBuffer->idData = canMessageTx[indexMsg].msgID;
     	msgBuffer->data = canMessageTx[indexMsg].msgData;
     	msgBuffer->length = canMessageTx[indexMsg].dlc;
-    	if (msgBuffer->length != 8){
+    	/*if (msgBuffer->length != 8){
     		if (canMessageTx[indexMsg].dlc != 8){
     			result = canMessageTx[indexMsg].dlc;}
     		else result=100;
-    	}else result = 101;
+    	}*/
 
 		canMessageTx[indexMsg].sending = true;
-        MCP2515_LoadTXBuffer(hdev, msgBuffer, true);
+		result = MCP2515_LoadTXBuffer(hdev, msgBuffer, true);
         readyToSend = false;
         //result = 0;
 	}
 
     else{
         
-    	MCP2515_LoadTXBuffer(hdev, msgBuffer, false);
+    	result = MCP2515_LoadTXBuffer(hdev, msgBuffer, false);
         //printf("readyToSend: %d\n", readyToSend);
         //printf("SPI State: %d (HAL_SPI_STATE_READY = %d)\n", hdev->hspi->State, HAL_SPI_STATE_READY);
         //printf("Message Buffer Status: %d (TRANSMISSION_IDLE = %d)\n", msgBuffer->status, TRANSMISSION_IDLE);
-    	if (canMessageTx[indexMsg].newMsg != 0)
+    	/*if (canMessageTx[indexMsg].newMsg != 0)
     		result = 1;
-    	else result = 2;
+    	else result = 2;*/
     }
     return result;
 }
 
 
-uint8_t MCP2515_InterruptHandler(MCP2515_HandleTypeDef* hdev, volatile uint8_t* intFlag, MCP2515_MessageBuffer* msgBuffer){
+uint8_t MCP2515_InterruptHandler(MCP2515_HandleTypeDef* hdev, GPIO_PinState intFlag, MCP2515_MessageBuffer* msgBuffer){
 	const uint8_t timeout = 10; // Timeout di 10 ms
     uint8_t result_read_TXBnCTRL[3] = {0x0,0x0,0x0};
+
+    bool isIdle = (msgBuffer->status == TRANSMISSION_IDLE);
+    bool isIntFlagSet = (intFlag==GPIO_PIN_RESET);
+    bool isSpiReady = (hdev->hspi->State == HAL_SPI_STATE_READY);
+
+    uint8_t TXxIF_val[3];
+
+	uint8_t read_TXBnCTRL[3];
+	uint8_t TXBnCTRL_addr[3] = {MCP2515_TXB0CTRL, MCP2515_TXB1CTRL, MCP2515_TXB2CTRL};
+	uint8_t TXREQ_val[3];
+
+
+
     // Verifica che la trasmissione non sia in corso, che l'interrupt sia attivo, e che l'SPI sia pronto
-    if (msgBuffer->status ==  TRANSMISSION_IDLE &&
-    	*intFlag
-		&& hdev->hspi->State == HAL_SPI_STATE_READY
-		){
+    if (isIdle && isIntFlagSet && isSpiReady) {
         //printf("flag1: %d\n", *intFlag);
         // Resetta il flag dell'interrupt per evitare riattivazioni indesiderate
-        *intFlag = false;
+
         //printf("flag2: %d\n", *intFlag);
         //printf("status: %d\n", msgBuffer->status);
         //printf("transmissionOn: %d\n", transmissionOn);
@@ -603,12 +684,8 @@ uint8_t MCP2515_InterruptHandler(MCP2515_HandleTypeDef* hdev, volatile uint8_t* 
             return 10;
         }
 
-        uint8_t canintf_val = read_canintf;
-        uint8_t TXxIF_val[3];
+        //uint8_t canintf_val = read_canintf;
 
-        uint8_t read_TXBnCTRL[3];
-        uint8_t TXBnCTRL_addr[3] = {MCP2515_TXB0CTRL, MCP2515_TXB1CTRL, MCP2515_TXB2CTRL};
-        uint8_t TXREQ_val[3];
 
         for (uint8_t i=0; i < 3; i++){
             // Estrai il bit TXxIF corrispondente dal registro CANINTF
@@ -616,7 +693,12 @@ uint8_t MCP2515_InterruptHandler(MCP2515_HandleTypeDef* hdev, volatile uint8_t* 
             //printf("TXxIF_val[%d]: %d\n", i, TXxIF_val[i]);
 
             if (TXxIF_val[i]) {
-                canintf_val &= ~(1 << (2+i));
+
+            	uint8_t mask = 1<<(2+i);
+
+            	MCP2515_WriteBitWithTimeout(hdev, MCP2515_CANINTF_MSG, mask, 0x0, timeout);
+
+                //canintf_val &= ~(1 << (2+i));
                 // Se il bit TXxIF è impostato
                 // Leggi il registro TXBnCTRL per verificare lo stato di TXREQ
                 result_read_TXBnCTRL[i] = MCP2515_ReadRegister(hdev,TXBnCTRL_addr[i], &read_TXBnCTRL[i]);
@@ -637,6 +719,7 @@ uint8_t MCP2515_InterruptHandler(MCP2515_HandleTypeDef* hdev, volatile uint8_t* 
 
 					}else
 						emptyTXBuffer[i] = true;*/
+                	hdev->emptyTXBuffer[i] = true;
                 	return 11;
                 }
 
@@ -645,7 +728,7 @@ uint8_t MCP2515_InterruptHandler(MCP2515_HandleTypeDef* hdev, volatile uint8_t* 
                 //printf("TXREQ_val: %d\n", TXREQ_val[i]);
 
                 if (!TXREQ_val[i]) { // Se TXREQ è 0, il buffer è vuoto
-                   emptyTXBuffer[i] = true;
+                	hdev->emptyTXBuffer[i] = true;
 
                 }else{
                 	//MCP2515_WriteRegisterWithTimeout(hdev,TXBnCTRL_addr[i], 0x0, timeout);
@@ -659,25 +742,32 @@ uint8_t MCP2515_InterruptHandler(MCP2515_HandleTypeDef* hdev, volatile uint8_t* 
 
                 	                }else
                 	                	emptyTXBuffer[i] = true;*/
+                	hdev->emptyTXBuffer[i] = true;
                 	return 12;
                 }
 
             }
         }
         // reset dei flag interrupt
+       // MCP2515_ReadRegister(hdev,MCP2515_CANINTF_MSG, &read_canintf);
+        //canintf_val &= ~(0x7 << 2);
+        //MCP2515_WriteRegisterWithTimeout(hdev,MCP2515_CANINTF_MSG, canintf_val, timeout);
+    }/*else{
 
-        canintf_val &= ~(0x7 << 2);
-        MCP2515_WriteRegisterWithTimeout(hdev,MCP2515_CANINTF_MSG, canintf_val, timeout);
-    }else{
-
-    	if (*intFlag){
-
-			if (hdev->hspi->State != HAL_SPI_STATE_READY){
+    	if (isIntFlagSet) {
+			if (!isSpiReady && !isIdle) {
 				return 13;
+			} else if (!isSpiReady) {
+				return 15;
+			} else if (!isIdle) {
+				return 16;
+			} else {
+				return 17;
 			}
-    	}else return 14;
-
-    }
+		} else {
+			return 14;
+		}
+    }*/
     //*result = result_read_TXBnCTRL[1];
     return MCP2515_OK;
 
