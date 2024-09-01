@@ -4,6 +4,7 @@
 uint8_t idDataEmpty[4] = {0x0, 0x0, 0x0, 0x0};
 uint8_t dataEmpty[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,0x0};
 static uint8_t writeMessage[4];
+volatile uint8_t transmissionComplete;
 
 // Costruttore
 uint8_t MCP2515_Init(MCP2515_HandleTypeDef* hdev, GPIO_TypeDef* csPort,  uint16_t csPin, SPI_HandleTypeDef* hspi, uint8_t baudrate,uint8_t intTxEnable ) {
@@ -76,7 +77,7 @@ uint8_t MCP2515_Reset(MCP2515_HandleTypeDef* hdev) {
     
     HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
     //HAL_Delay(2);
-    HAL_SPI_Transmit_DMA(hdev->hspi, &resetCommand, 1); // Invia il comando di reset
+    HAL_SPI_Transmit_IT(hdev->hspi, &resetCommand, 1); // Invia il comando di reset
     uint32_t startTime = HAL_GetTick();
     // Attendi il completamento della trasmissione
     while (!hdev->transmissionComplete) {
@@ -196,7 +197,7 @@ uint8_t MCP2515_WriteRegisterWithTimeout(MCP2515_HandleTypeDef* hdev, uint8_t ad
     
     HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
     hdev->transmissionComplete = 0;
-    HAL_SPI_Transmit_DMA(hdev->hspi, writeMessage, 3);
+    HAL_SPI_Transmit_IT(hdev->hspi, writeMessage, 3);
 
     startTime = HAL_GetTick();
     while (!hdev->transmissionComplete) {
@@ -227,7 +228,7 @@ uint8_t MCP2515_WriteBitWithTimeout(MCP2515_HandleTypeDef* hdev, uint8_t address
 
     HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
     hdev->transmissionComplete = 0;
-    HAL_SPI_Transmit_DMA(hdev->hspi, writeMessage, 4);
+    HAL_SPI_Transmit_IT(hdev->hspi, writeMessage, 4);
 
     startTime = HAL_GetTick();
     while (!hdev->transmissionComplete) {
@@ -254,7 +255,7 @@ uint8_t MCP2515_ReadRegister(MCP2515_HandleTypeDef* hdev, uint8_t address, uint8
     HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
     hdev->transmissionComplete = 0;  // Resetta lo stato
     // Trasmetti il comando di lettura e l'indirizzo
-    HAL_SPI_Transmit_DMA(hdev->hspi, readMessage, 2);
+    HAL_SPI_Transmit_IT(hdev->hspi, readMessage, 2);
     startTime = HAL_GetTick();
     // Attendi che la trasmissione sia completata
     while (!hdev->transmissionComplete) {
@@ -266,7 +267,7 @@ uint8_t MCP2515_ReadRegister(MCP2515_HandleTypeDef* hdev, uint8_t address, uint8
     }
     hdev->transmissionComplete = 0;  // Resetta lo stato
     // Ricevi il dato dal registro
-    HAL_SPI_TransmitReceive_DMA(hdev->hspi, &dummyData, data, 1);
+    HAL_SPI_TransmitReceive_IT(hdev->hspi, &dummyData, data, 1);
     startTime = HAL_GetTick();
     // Attendi che la ricezione sia completata
     while (!hdev->transmissionComplete) {
@@ -359,7 +360,7 @@ uint8_t MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer*
 	switch (msgBuffer->status){
 
         case TRANSMISSION_IDLE:
-            if (start == 1){
+            if (start == true){
                 msgBuffer->status = TRANSMISSION_SET_VALUE;
                 hdev->transmissionComplete = 0;
                 hdev->emptyTXBuffer[msgBuffer->buffer] = false;
@@ -405,50 +406,47 @@ uint8_t MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer*
             HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
             hdev->transmissionComplete = 0;
             //printf("ID_ADDR: 0x%02X"\n, msgBuffer->loadIDCmd);
-            HAL_SPI_Transmit_DMA(hdev->hspi, &msgBuffer->loadIDCmd, 1);
+            HAL_SPI_Transmit_IT(hdev->hspi, &msgBuffer->loadIDCmd, 1);
             msgBuffer->status = TRANSMISSION_ID_VALUE;
             
             break;
 
         case TRANSMISSION_ID_VALUE:
 
-        	if (timeWait>=1){
-        		msgBuffer->status = TRANSMISSION_ERROR;
-        		return 100;
-        	}
+
             
              if (hdev->transmissionComplete == 1) {
             	 // HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS basso
                 hdev->transmissionComplete = 0;
                 //HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
-                HAL_SPI_Transmit_DMA(hdev->hspi, msgBuffer->idData, 4);
+                HAL_SPI_Transmit_IT(hdev->hspi, msgBuffer->idData, 4);
                 msgBuffer->status = TRANSMISSION_DATA_CMD;
+
             }
-            
+            if (timeWait>=2){
+        		msgBuffer->status = TRANSMISSION_ERROR;
+        		return 100;
+        	}
 
             break;
 
         case TRANSMISSION_DATA_CMD:
-        	if (timeWait>=1){
+
+             if (hdev->transmissionComplete == 1) {
+            	HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS basso
+                hdev->transmissionComplete = 0;
+                HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
+                HAL_SPI_Transmit_IT(hdev->hspi, &msgBuffer->loadDataCmd, 1);
+                msgBuffer->status = TRANSMISSION_DATA_VALUE;
+            }
+            if (timeWait>=2){
         	        		msgBuffer->status = TRANSMISSION_ERROR;
         	        		return 101;
         	        	}
             
-             if (hdev->transmissionComplete == 1) {
-            	// HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS basso
-                hdev->transmissionComplete = 0;
-                //HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
-                HAL_SPI_Transmit_DMA(hdev->hspi, &msgBuffer->loadDataCmd, 1);
-                msgBuffer->status = TRANSMISSION_DATA_VALUE;
-            }
-            
             break;
 
         case TRANSMISSION_DATA_VALUE:
-        	if (timeWait>=1){
-        	        		msgBuffer->status = TRANSMISSION_ERROR;
-        	        		return 102;
-        	        	}
 
              if (hdev->transmissionComplete == 1) {
             	// HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS basso
@@ -460,18 +458,18 @@ uint8_t MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer*
 
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
 
-                HAL_SPI_Transmit_DMA(hdev->hspi, msgBuffer->data, msgBuffer->length);
+                HAL_SPI_Transmit_IT(hdev->hspi, msgBuffer->data, msgBuffer->length);
                 msgBuffer->status = TRANSMISSION_DLC;
             }
-            
+            if (timeWait>=2){
+        	        		msgBuffer->status = TRANSMISSION_ERROR;
+        	        		return 102;
+        	        	}
+
             break;
 
         case TRANSMISSION_DLC:
-        	if (timeWait>=1){
-        	        		msgBuffer->status = TRANSMISSION_ERROR;
-        	        		return 103;
-        	        	}
-            
+
              if (hdev->transmissionComplete == 1) {
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS basso
                 writeMessage[0] = MCP2515_WRITE;
@@ -483,19 +481,19 @@ uint8_t MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer*
                 //printf("0: 0x%02X, 1: 0x%02X, 2: 0x%02X\n", writeMessage[0], writeMessage[1], writeMessage[2]);
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
                 hdev->transmissionComplete = 0;
-                HAL_SPI_Transmit_DMA(hdev->hspi, writeMessage, 3);
+                HAL_SPI_Transmit_IT(hdev->hspi, writeMessage, 3);
                 msgBuffer->status = TRANSMISSION_TXREQ;
             }
-            
+            if (timeWait>=1){
+        	        		msgBuffer->status = TRANSMISSION_ERROR;
+        	        		return 103;
+        	        	}
+
             break;
 
         case TRANSMISSION_TXREQ:
             
-        	if (timeWait>=1){
-        	        		msgBuffer->status = TRANSMISSION_ERROR;
-        	        		return 104;
-        	        	}
-            
+
             if (hdev->transmissionComplete == 1) {
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS basso
                 writeMessage[0] = MCP2515_BIT_MODIFY;
@@ -505,20 +503,20 @@ uint8_t MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer*
 
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_RESET);  // CS basso
                 hdev->transmissionComplete = 0;
-                HAL_SPI_Transmit_DMA(hdev->hspi, writeMessage, 4);
+                HAL_SPI_Transmit_IT(hdev->hspi, writeMessage, 4);
 
                 msgBuffer->status = TRANSMISSION_END;
                 
             }
+            if (timeWait>=2){
+        	        		msgBuffer->status = TRANSMISSION_ERROR;
+        	        		return 104;
+        	        	}
             
             break;
 
         case TRANSMISSION_END:
-        	if (timeWait>=1){
-        	        		msgBuffer->status = TRANSMISSION_ERROR;
-        	        		return 105;
-        	        	}
-            if (hdev->transmissionComplete == 1) {
+        	 if (hdev->transmissionComplete == 1) {
                 HAL_GPIO_WritePin(hdev->csPort, hdev->csPin, GPIO_PIN_SET);  // CS alto
                 hdev->transmissionComplete = 0;
                 //uint8_t data;
@@ -551,6 +549,11 @@ uint8_t MCP2515_LoadTXBuffer(MCP2515_HandleTypeDef* hdev, MCP2515_MessageBuffer*
 
 
             }
+        	 if (timeWait>=2){
+        	        		msgBuffer->status = TRANSMISSION_ERROR;
+        	        		return 105;
+        	        	}
+
             break;
 
         case TRANSMISSION_RESET:

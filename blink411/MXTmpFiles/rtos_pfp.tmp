@@ -1,3 +1,2 @@
 void StartTaskADC(void *argument);
-void StartTaskCAN(void *argument);
 void StartTaskSPI(void *argument);#n

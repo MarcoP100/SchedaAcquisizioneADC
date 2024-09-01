@@ -10,10 +10,6 @@
 #t/* USER CODE BEGIN RTOS_TIMERS */
 #t/* start timers, add new ones, ... */
 #t/* USER CODE END RTOS_TIMERS */
-#n#t/* Create the queue(s) */
-#t/* creation of messageBuffer_10 */
-#tmessageBuffer_10Handle = osMessageQueueNew (10, sizeof(uint16_t), &messageBuffer_10_attributes);
-#n
 #n
 #t/* USER CODE BEGIN RTOS_QUEUES */
 #t/* add queues, ... */
@@ -21,9 +17,6 @@
 #n#t/* Create the thread(s) */
 #t/* creation of TaskADC */
 #tTaskADCHandle = osThreadNew(StartTaskADC, NULL, &TaskADC_attributes);
-#n
-#t/* creation of TaskCAN */
-#tTaskCANHandle = osThreadNew(StartTaskCAN, NULL, &TaskCAN_attributes);
 #n
 #t/* creation of TaskSPI */
 #tTaskSPIHandle = osThreadNew(StartTaskSPI, NULL, &TaskSPI_attributes);

@@ -1,21 +1,3 @@
-/* USER CODE BEGIN Header_StartTaskCAN */
-/**
-* @brief Function implementing the TaskCAN thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartTaskCAN */
-void StartTaskCAN(void *argument)
-{
-#t/* USER CODE BEGIN StartTaskCAN */
-#t/* Infinite loop */
-#tfor(;;)
-#t{
-#t#tosDelay(1);
-#t}
-#t/* USER CODE END StartTaskCAN */
-}
-#n
 /* USER CODE BEGIN Header_StartTaskSPI */
 /**
 * @brief Function implementing the TaskSPI thread.

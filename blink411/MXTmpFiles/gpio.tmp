@@ -11,8 +11,8 @@ static void MX_GPIO_Init(void)
 /* USER CODE END MX_GPIO_Init_1 */
 #n#t/* GPIO Ports Clock Enable */
 #t__HAL_RCC_GPIOC_CLK_ENABLE();
-#t__HAL_RCC_GPIOB_CLK_ENABLE();
 #t__HAL_RCC_GPIOA_CLK_ENABLE();
+#t__HAL_RCC_GPIOB_CLK_ENABLE();
 #n#t/*Configure GPIO pin Output Level */
 #tHAL_GPIO_WritePin(LedOnBoard_GPIO_Port, LedOnBoard_Pin, GPIO_PIN_RESET);
 #n#t/*Configure GPIO pin Output Level */
@@ -31,12 +31,10 @@ static void MX_GPIO_Init(void)
 #tHAL_GPIO_Init(SPI1_CS_GPIO_Port, &GPIO_InitStruct);
 #n#t/*Configure GPIO pin : MCP2515_INT_Pin */
 #tGPIO_InitStruct.Pin = MCP2515_INT_Pin;
-#tGPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+#tGPIO_InitStruct.Mode = GPIO_MODE_INPUT;
 #tGPIO_InitStruct.Pull = GPIO_PULLUP;
 #tHAL_GPIO_Init(MCP2515_INT_GPIO_Port, &GPIO_InitStruct);
-#n#t/* EXTI interrupt init*/
-#tHAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
-#tHAL_NVIC_EnableIRQ(EXTI9_5_IRQn);#n#n
+#n
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
 }
