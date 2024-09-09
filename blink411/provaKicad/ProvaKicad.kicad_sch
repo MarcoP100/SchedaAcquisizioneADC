@@ -1,0 +1,127 @@
+(kicad_sch
+	(version 20231120)
+	(generator "eeschema")
+	(generator_version "8.0")
+	(uuid "f879be69-9a4a-4dcb-a6d1-c39a6a6e7df2")
+	(paper "A4")
+	(lib_symbols)
+	(sheet
+		(at 97.79 21.59)
+		(size 55.88 38.1)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "8f38036e-a76c-4f2d-8ea2-c6bdb0ec4028")
+		(property "Sheetname" "SPI-CAN"
+			(at 97.79 20.8784 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "SPI_CAN.kicad_sch"
+			(at 97.79 60.2746 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "ProvaKicad"
+				(path "/f879be69-9a4a-4dcb-a6d1-c39a6a6e7df2"
+					(page "3")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 20.32 20.32)
+		(size 59.69 39.37)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "b1c1a22b-4c2a-44bd-bfa5-2a5e39c68402")
+		(property "Sheetname" "Power-feed"
+			(at 20.32 19.6084 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "power.kicad_sch"
+			(at 20.32 60.2746 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "ProvaKicad"
+				(path "/f879be69-9a4a-4dcb-a6d1-c39a6a6e7df2"
+					(page "2")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 171.45 21.59)
+		(size 60.96 38.1)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "b774f746-f46d-43c5-8fdc-fbaf8c701cd3")
+		(property "Sheetname" "STM32_adc_in"
+			(at 171.45 20.8784 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "stm32_adc_in.kicad_sch"
+			(at 171.45 60.2746 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "ProvaKicad"
+				(path "/f879be69-9a4a-4dcb-a6d1-c39a6a6e7df2"
+					(page "4")
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+)
