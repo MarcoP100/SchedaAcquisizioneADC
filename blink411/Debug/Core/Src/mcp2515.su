@@ -9,7 +9,7 @@
 ../Core/Src/mcp2515.c:285:9:MCP2515_SetMode	24	static
 ../Core/Src/mcp2515.c:316:9:MCP2515_ResetInt	24	static
 ../Core/Src/mcp2515.c:327:9:MCP2515_SetIntTx	24	static
-../Core/Src/mcp2515.c:354:9:MCP2515_LoadTXBuffer	24	static
-../Core/Src/mcp2515.c:586:9:MCP2515_SendMessage	32	static
-../Core/Src/mcp2515.c:655:9:MCP2515_InterruptHandler	72	static
-../Core/Src/mcp2515.c:779:6:initBuffer	16	static
+../Core/Src/mcp2515.c:354:9:MCP2515_LoadTXBuffer	32	static
+../Core/Src/mcp2515.c:630:9:MCP2515_SendMessage	32	static
+../Core/Src/mcp2515.c:711:9:MCP2515_InterruptHandler	72	static
+../Core/Src/mcp2515.c:835:6:initBuffer	16	static

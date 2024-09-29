@@ -71,10 +71,10 @@ MCP2515_HandleTypeDef mcp2515_1;
 //uint8_t canMsgToSend = 0;
 MCP2515_canMessage canMessageTx[BUFFER_TX_SPI];
 static uint8_t result_mcp2515Init = 1;
-//SemaphoreHandle_t xSemaphore;
-static bool adcInUse = false;
-static bool spiInUse = false;
-
+SemaphoreHandle_t xMutex;
+volatile bool adcInUse = false;
+volatile bool spiInUse = false;
+static uint32_t msg14 = 0;
 
 /* USER CODE END PV */
 
@@ -145,6 +145,7 @@ int main(void)
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   //xSemaphore = xSemaphoreCreateBinary();
   //xSemaphoreGive(xSemaphore);
+  xMutex = xSemaphoreCreateMutex();
   /* add semaphores, ... */
   /* USER CODE END RTOS_SEMAPHORES */
 
@@ -321,6 +322,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.Mode = SPI_MODE_MASTER;
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
   hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
@@ -527,6 +529,13 @@ void canMsgTx(canMessage* messageToSend, MCP2515_canMessage* messageBuffer){
 	  messageBuffer->dlc = messageToSend->dlc;
 	  messageBuffer->newMsg = true;
 
+	  if ((messageBuffer->msgID[0] != 2) ||
+			 ( messageBuffer->msgID[1] != 0 &&
+			  messageBuffer->msgID[1] != 96 &&
+			  messageBuffer->msgID[1] != 64 &&
+			  messageBuffer->msgID[1] != 32)){
+		  msg14 += 1;
+	  }
 
 
 }
@@ -574,7 +583,7 @@ void StartTaskADC(void *argument)
 {
   /* USER CODE BEGIN 5 */
 	TickType_t xLastWakeTime = xTaskGetTickCount();
-	const TickType_t xFrequency = 5;
+	const TickType_t xFrequency = 5;//pdMS_TO_TICKS(5);;
 
 
 	float min_input = 0.0;     // Minimo valore di tensione (0V)
@@ -592,15 +601,17 @@ void StartTaskADC(void *argument)
 	// Inizializza start_time
 	// start_time = HAL_GetTick();
 
+	uint16_t value_to_send = 0;
+
   /* Infinite loop */
   for(;;)
   {
-	  vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
+	  //if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
 
 	  //start_time = HAL_GetTick();  // Usa SysTick per ottenere il tempo attuale
 
-	  if (result_mcp2515Init == MCP2515_OK &&
+	  if (result_mcp2515Init == MCP2515_OK&&
 			spiInUse == false){
 			 //(xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE)) {
 		  adcInUse = true;
@@ -628,6 +639,10 @@ void StartTaskADC(void *argument)
 
 		  }
 
+		  /********/
+
+
+
 		  //0x010
 		  canMessage[0].msgID = 0x010;
 		  canMessage[0].extended = false;
@@ -637,14 +652,33 @@ void StartTaskADC(void *argument)
 			  canMessage[0].msgData[m] = 0x0;
 		  }
 
-		  canMessage[0].msgData[0] = (uint8_t)(adcValues[0] & 0x00FF);
-		  canMessage[0].msgData[1] = (uint8_t)(adcValues[0] >> 8);
-		  canMessage[0].msgData[2] = (uint8_t)(adcValues[1] & 0x00FF);
-		  canMessage[0].msgData[3] = (uint8_t)(adcValues[1] >> 8);
-		  canMessage[0].msgData[4] = (uint8_t)(adcValues[2] & 0x00FF);
-		  canMessage[0].msgData[5] = (uint8_t)(adcValues[2] >> 8);
-		  canMessage[0].msgData[6] = (uint8_t)(adcValues[3] & 0x00FF);
-		  canMessage[0].msgData[7] = (uint8_t)(adcValues[3] >> 8);
+		  //adcValues[0] = 0x00110011;
+		  value_to_send = (uint16_t)adcValues[0];
+		  canMessage[0].msgData[0] = value_to_send;
+		  canMessage[0].msgData[1] = value_to_send >> 8;
+
+		  //adcValues[1] = 0x22332233;
+		  value_to_send = (uint16_t)adcValues[1];
+		  canMessage[0].msgData[2] = value_to_send;
+		  canMessage[0].msgData[3] = value_to_send >> 8;
+
+		  //adcValues[2] = 0x44554455;
+		  value_to_send = (uint16_t)adcValues[2];
+		  canMessage[0].msgData[4] = value_to_send;
+		  canMessage[0].msgData[5] = value_to_send >> 8;
+
+		  //adcValues[3] = 0x66776677;
+		  value_to_send = (uint16_t)adcValues[3];
+		  canMessage[0].msgData[6] = value_to_send;
+		  canMessage[0].msgData[7] = value_to_send >> 8;
+		  /*canMessage[0].msgData[0] = 10;
+		  		  canMessage[0].msgData[1] = 20;
+		  		  canMessage[0].msgData[2] = 30;
+		  		  canMessage[0].msgData[3] = 40;
+		  		  canMessage[0].msgData[4] = 50;
+		  		  canMessage[0].msgData[5] = 60;
+		  		  canMessage[0].msgData[6] = 70;
+		  		  canMessage[0].msgData[7] = 80;*/
 
 		  canMsgTx(&canMessage[0], &canMessageTx[indexTx]);
 
@@ -664,14 +698,33 @@ void StartTaskADC(void *argument)
 			  canMessage[1].msgData[m] = 0x0;
 		  }
 
-		  canMessage[1].msgData[0] = (uint8_t)(adcValues[4] & 0x00FF);
-		  canMessage[1].msgData[1] = (uint8_t)(adcValues[4] >> 8);
-		  canMessage[1].msgData[2] = (uint8_t)(adcValues[5] & 0x00FF);
-		  canMessage[1].msgData[3] = (uint8_t)(adcValues[5] >> 8);
-		  canMessage[1].msgData[4] = (uint8_t)(adcValues[6] & 0x00FF);
-		  canMessage[1].msgData[5] = (uint8_t)(adcValues[6] >> 8);
-		  canMessage[1].msgData[6] = (uint8_t)(adcValues[7] & 0x00FF);
-		  canMessage[1].msgData[7] = (uint8_t)(adcValues[7] >> 8);
+		  //adcValues[4] = 0x88998899;
+		  value_to_send = (uint16_t)adcValues[4];
+		  canMessage[1].msgData[0] = value_to_send;
+		  canMessage[1].msgData[1] = value_to_send >> 8;
+
+		  //adcValues[5] = 0xaabbaabb;
+		  value_to_send = (uint16_t)adcValues[5];
+		  canMessage[1].msgData[2] = value_to_send;
+		  canMessage[1].msgData[3] = value_to_send >> 8;
+
+		  //adcValues[6] = 0xccddccdd;
+		  value_to_send = (uint16_t)adcValues[6];
+		  canMessage[1].msgData[4] = value_to_send;
+		  canMessage[1].msgData[5] = value_to_send >> 8;
+
+		  //adcValues[7] = 0xeeffeeff;
+		  value_to_send = (uint16_t)adcValues[7];
+		  canMessage[1].msgData[6] = value_to_send;
+		  canMessage[1].msgData[7] = value_to_send >> 8;
+		  /*canMessage[1].msgData[0] = 10;
+		  		  		  canMessage[1].msgData[1] = 20;
+		  		  		  canMessage[1].msgData[2] = 30;
+		  		  		  canMessage[1].msgData[3] = 40;
+		  		  		  canMessage[1].msgData[4] = 50;
+		  		  		  canMessage[1].msgData[5] = 60;
+		  		  		  canMessage[1].msgData[6] = 70;
+		  		  		  canMessage[1].msgData[7] = 80;*/
 
 		  canMsgTx(&canMessage[1], &canMessageTx[indexTx]);
 
@@ -690,14 +743,35 @@ void StartTaskADC(void *argument)
 			  canMessage[2].msgData[m] = 0x0;
 		  }
 
-		  canMessage[2].msgData[0] = (uint8_t)(ui_pressureValue_dbar[0] & 0x00FF);
-		  canMessage[2].msgData[1] = (uint8_t)(ui_pressureValue_dbar[0] >> 8);
-		  canMessage[2].msgData[2] = (uint8_t)(ui_pressureValue_dbar[1] & 0x00FF);
-		  canMessage[2].msgData[3] = (uint8_t)(ui_pressureValue_dbar[1] >> 8);
-		  canMessage[2].msgData[4] = (uint8_t)(ui_pressureValue_dbar[2] & 0x00FF);
-		  canMessage[2].msgData[5] = (uint8_t)(ui_pressureValue_dbar[2] >> 8);
-		  canMessage[2].msgData[6] = (uint8_t)(ui_pressureValue_dbar[3] & 0x00FF);
-		  canMessage[2].msgData[7] = (uint8_t)(ui_pressureValue_dbar[3] >> 8);
+		  //ui_pressureValue_dbar[0] = 0x00110011;
+		  value_to_send = (uint16_t)ui_pressureValue_dbar[0];
+		  canMessage[2].msgData[0] = value_to_send;
+		  canMessage[2].msgData[1] = value_to_send >> 8;
+
+		  //ui_pressureValue_dbar[1] = 0x22332233;
+		  value_to_send = (uint16_t)ui_pressureValue_dbar[1];
+		  canMessage[2].msgData[2] = value_to_send;
+		  canMessage[2].msgData[3] = value_to_send >> 8;
+
+		  //ui_pressureValue_dbar[2] = 0x44554455;
+		  value_to_send = (uint16_t)ui_pressureValue_dbar[2];
+		  canMessage[2].msgData[4] = value_to_send;
+		  canMessage[2].msgData[5] = value_to_send >> 8;
+
+		  //ui_pressureValue_dbar[3] = 0x66776677;
+		  value_to_send = (uint16_t)ui_pressureValue_dbar[3];
+		  canMessage[2].msgData[6] = value_to_send;
+		  canMessage[2].msgData[7] = value_to_send >> 8;
+
+
+		  /*canMessage[2].msgData[0] = 10;
+		  		  		  canMessage[2].msgData[1] = 20;
+		  		  		  canMessage[2].msgData[2] = 30;
+		  		  		  canMessage[2].msgData[3] = 40;
+		  		  		  canMessage[2].msgData[4] = 50;
+		  		  		  canMessage[2].msgData[5] = 60;
+		  		  		  canMessage[2].msgData[6] = 70;
+		  		  		  canMessage[2].msgData[7] = 80;*/
   		  canMsgTx(&canMessage[2], &canMessageTx[indexTx]);
 
 		  indexTx++;
@@ -705,7 +779,6 @@ void StartTaskADC(void *argument)
 			  indexTx = 0;
 		  }
 		  /***********/
-		  /********/
 		  //0x013
 		  canMessage[3].msgID = 0x013;
 		  canMessage[3].extended = false;
@@ -715,25 +788,51 @@ void StartTaskADC(void *argument)
 			  canMessage[3].msgData[m] = 0x0;
 		  }
 
-		  canMessage[3].msgData[0] = (uint8_t)(ui_pressureValue_dbar[4] & 0x00FF);
-		  canMessage[3].msgData[1] = (uint8_t)(ui_pressureValue_dbar[4] >> 8);
-		  canMessage[3].msgData[2] = (uint8_t)(ui_pressureValue_dbar[5] & 0x00FF);
-		  canMessage[3].msgData[3] = (uint8_t)(ui_pressureValue_dbar[5] >> 8);
-		  canMessage[3].msgData[4] = (uint8_t)(ui_pressureValue_dbar[6] & 0x00FF);
-		  canMessage[3].msgData[5] = (uint8_t)(ui_pressureValue_dbar[6] >> 8);
-		  canMessage[3].msgData[6] = (uint8_t)(ui_pressureValue_dbar[7] & 0x00FF);
-		  canMessage[3].msgData[7] = (uint8_t)(ui_pressureValue_dbar[7] >> 8);
+		  //ui_pressureValue_dbar[4] = 0x88998899;
+		  value_to_send = (uint16_t)ui_pressureValue_dbar[4];
+		  canMessage[3].msgData[0] = value_to_send;
+		  canMessage[3].msgData[1] = value_to_send >> 8;
+
+		  //ui_pressureValue_dbar[5] = 0xaabbaabb;
+		  value_to_send = (uint16_t)ui_pressureValue_dbar[5];
+		  canMessage[3].msgData[2] = value_to_send;
+		  canMessage[3].msgData[3] = value_to_send >> 8;
+
+		  //ui_pressureValue_dbar[6] = 0xccddccdd;
+		  value_to_send = (uint16_t)ui_pressureValue_dbar[6];
+		  canMessage[3].msgData[4] = value_to_send;
+		  canMessage[3].msgData[5] = value_to_send >> 8;
+
+		  //ui_pressureValue_dbar[7] = 0xeeffeeff;
+		  value_to_send = (uint16_t)ui_pressureValue_dbar[7];
+		  canMessage[3].msgData[6] = value_to_send;
+		  canMessage[3].msgData[7] = value_to_send >> 8;
+		  /*canMessage[3].msgData[0] = 10;
+						  canMessage[3].msgData[1] = 20;
+						  canMessage[3].msgData[2] = 30;
+						  canMessage[3].msgData[3] = 40;
+						  canMessage[3].msgData[4] = 50;
+						  canMessage[3].msgData[5] = 60;
+						  canMessage[3].msgData[6] = 70;
+						  canMessage[3].msgData[7] = 80;*/
 			  canMsgTx(&canMessage[3], &canMessageTx[indexTx]);
 
 		  indexTx++;
 		  if (indexTx >= BUFFER_TX_SPI) {
 			  indexTx = 0;
 		  }
+
+
+
+
+
 		 /* char message [20];
 		  // Converte l'intero in una stringa
 		  sprintf(message, "index: %d\r\n", indexTx);
 		  HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);*/
 		  adcInUse = false;
+		  //xSemaphoreGive(xMutex);
+
 		  // Rilascia il semaforo quando l'operazione è completata
 		  //xSemaphoreGive(xSemaphore);
 
@@ -742,7 +841,8 @@ void StartTaskADC(void *argument)
 			  sprintf(message, "ADC: %d\r\n", canMessagesBuffer[index].msgData[0]);
 			  HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
 	*/
-
+	  //}
+	  vTaskDelayUntil(&xLastWakeTime, xFrequency);
 	  }
 	 // HAL_GPIO_TogglePin(LedOnBoard_GPIO_Port, LedOnBoard_Pin);
 
@@ -877,6 +977,7 @@ void StartTaskSPI(void *argument)
   for(;;)
   {
 
+	  //if (xSemaphoreTake(xMutex, 0) == pdTRUE) {
 	  //ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 	  if (result_mcp2515Init == MCP2515_OK){
 		// timeADC = HAL_GetTick() - start_time;
@@ -952,11 +1053,11 @@ void StartTaskSPI(void *argument)
 		}*/
 
 
-
+		  if (!spiInUse && !adcInUse){
 			  mcp2515IntState = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6);
 
 			  resultHandler = MCP2515_InterruptHandler(&mcp2515_1, mcp2515IntState, &canMsg_buffer);
-
+		  }
 
 
 
@@ -977,7 +1078,7 @@ void StartTaskSPI(void *argument)
 
 			  //if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE){
 				 // do{
-		  	  if (!adcInUse){
+		  	 if (!adcInUse){
 						resultSend = MCP2515_SendMessage(&mcp2515_1, &canMsg_buffer, canMessageTx);
 						if (canMsg_buffer.status != TRANSMISSION_IDLE) {
 							spiInUse = true;
@@ -987,13 +1088,13 @@ void StartTaskSPI(void *argument)
 
 
 
-						if (resultSend != 0){
+						/*if (resultSend != 0){
 
 						 // Converte l'intero in una stringa
 						  sprintf(message, "ResultSend: %d\r\n", resultSend);
 						  HAL_UART_Transmit(&huart1, (uint8_t*)message, strlen(message), HAL_MAX_DELAY);
-						}
-		  	  }
+						}*/
+		  	 }
 				 // }while(canMsg_buffer.status != TRANSMISSION_IDLE);
 				/*if (canMsg_buffer.status != TRANSMISSION_IDLE && taskADCIsSuspended == pdFALSE) {
 					vTaskSuspend(TaskADCHandle);

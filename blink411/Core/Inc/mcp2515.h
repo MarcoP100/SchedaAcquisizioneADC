@@ -128,7 +128,7 @@ enum TransmissionState {
     TRANSMISSION_ERROR          // Valore 9
 };
 
-#define BUFFER_TX_SPI 50
+#define BUFFER_TX_SPI 49
 
 
 
